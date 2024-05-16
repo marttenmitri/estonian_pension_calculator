@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salary and Investment Inputs</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+            background: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            flex: 1;
+            font-size: 16px;
+            color: #666;
+        }
+        .form-group input[type="text"],
+        .form-group input[type="number"] {
+            flex: 2;
+            padding: 10px;
+            margin: 0 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .form-group button {
+            padding: 10px 20px;
+            background-color: #ccc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .form-group button.active {
+            background-color: #4CAF50;
+            cursor: pointer;
+        }
+        .form-group button:hover.active {
+            background-color: #45a049;
+        }
+        .output {
+            flex: 1;
+            padding: 10px;
+            background: #e8e8e8;
+            border-radius: 4px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Pension payment calculator</h2>
+        <div class="form-group">
+            <label for="minSalary">Tax-free Income:</label>
+            <input type="text" id="minSalary" placeholder="Enter minimum salary" value="7848">
+        </div>
+        <div class="form-group">
+            <label for="wantedInvestment">Pension Payment %:</label>
+            <input type="number" id="wantedInvestment" placeholder="Enter desired investment percentage" oninput="toggleButton()" value="15">
+        </div>
+        <div class="form-group">
+            <label for="baseSalary">Gross Salary:</label>
+            <input type="number" id="baseSalary" placeholder="Enter base salary" oninput="toggleButton()">
+        </div>
+        <div class="form-group">
+            <button id="calculateButton"  id="calculateButton" onclick="calculateSalaries()" disabled>Calculate Payments</button>
+        </div>
+    </div>
+
+    <div class="container" id="monthlySalaries">
+        <div>
+            <label for="equalDistribution">Growing Distribution:</label>
+            <input type="checkbox" id="equalDistribution" onchange="toggleDistribution()">
+        </div>
+        <h2>Monthly Salaries and Pension Payments</h2>
+        <form id="salaryForm">
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('monthlySalaries').style.display = 'none'; // Initially hide the monthly salaries section
+        let useEqualDistribution = false;
+        
+        function toggleButton() {
+            const baseSalary = document.getElementById('baseSalary').value;
+            const wantedInvestment = document.getElementById('wantedInvestment').value;;
+            const calculateButton = document.getElementById('calculateButton');
+            calculateButton.disabled = !baseSalary || !wantedInvestment; // Disable button if base salary is empty
+            calculateButton.className = baseSalary && wantedInvestment ? 'active' : ''; // Change button style based on input
+        }
+        
+        function populateSalaries() {
+            const form = document.getElementById('salaryForm');
+            form.innerHTML = ''; // Clear the form to ensure no duplicates
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            months.forEach((month, index) => {
+                const div = document.createElement('div');
+                div.className = 'form-group';
+                div.innerHTML = `
+                    <label>${month}:</label>
+                    <input type="number" id="salary${index+1}" oninput="recalculateInvestments()" value="${document.getElementById('baseSalary').value}">
+                    <span class="output" id="output${index+1}">0 €</span>
+                `;
+                form.appendChild(div);
+            });
+        }
+        
+        function calculateSalaries() {
+            const baseSalary = document.getElementById('baseSalary').value;
+            if (baseSalary) {
+                populateSalaries(); // Generate inputs first
+                document.getElementById('monthlySalaries').style.display = 'block'; // Show monthly salaries block
+                recalculateInvestments();
+            } else {
+                alert('Please enter a base salary first.');
+            }
+        }
+        
+        function recalculateInvestments() {
+            totalInvestment = 0;
+            totalAllowableInvestment = 0;
+            for (let i = 1; i <= 12; i++) {
+                calculateInvestment(i);
+            }
+        }
+        
+        function calculateInvestment(monthIndex) {
+            const salary = parseFloat(document.getElementById('salary' + monthIndex).value || 0);
+            const cumulativeSalary = getCumulativeSalary(monthIndex);
+            const minSalary = parseFloat(document.getElementById('minSalary').value || 0);
+            const taxFreeAllowance = calculateTaxFreeAllowance(cumulativeSalary, minSalary);
+            const overMin = cumulativeSalary > taxFreeAllowance ? cumulativeSalary - taxFreeAllowance : 0;
+            const taxPaid = overMin * 0.2;
+
+            const investmentPercentage = parseFloat(document.getElementById('wantedInvestment').value) / 100;
+            const maxInvestmentForMonth = (taxPaid / 0.2) - totalInvestment;
+            let desiredInvestment = (cumulativeSalary * investmentPercentage) - totalInvestment;
+
+            if (useEqualDistribution) {
+                // Adjust to spread the investment more evenly over the remaining months
+                const remainingMonths = 12 - monthIndex + 1;
+                desiredInvestment = (cumulativeSalary * investmentPercentage - totalInvestment) / remainingMonths;
+            }
+
+            // Check if the total investment exceeds $6000
+            if (totalInvestment + Math.min(desiredInvestment, maxInvestmentForMonth) > 6000) {
+                // If it exceeds, set the investment amount to keep the total below $6000
+                desiredInvestment = Math.max(6000 - totalInvestment, 0);
+            }
+
+            let investmentAmount = Math.min(desiredInvestment, maxInvestmentForMonth);
+            totalInvestment += investmentAmount;
+            document.getElementById('output' + monthIndex).textContent = `${investmentAmount.toFixed(2)} €`;
+        }
+        
+        function calculateTaxFreeAllowance(cumulativeSalary, minSalary) {
+            if (cumulativeSalary <= 14400) {
+                return minSalary;
+            } else if (cumulativeSalary <= 25200) {
+                return minSalary - (minSalary / 10800) * (cumulativeSalary - 14400);
+            } else {
+                return 0;
+            }
+        }
+        
+        function getCumulativeSalary(monthIndex) {
+            let total = 0;
+            for (let i = 1; i <= monthIndex; i++) {
+                total += parseFloat(document.getElementById('salary' + i).value || 0);
+            }
+            return total;
+        }
+        
+        function toggleDistribution() {
+            useEqualDistribution = document.getElementById('equalDistribution').checked;
+            recalculateInvestments(); // Recalculate investments based on new distribution method
+        }
+        </script>
+        
+</body>
+</html>
